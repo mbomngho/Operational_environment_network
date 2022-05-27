@@ -31,6 +31,16 @@ resource "aws_vpc" "kojitechs_vpc" {
   }
 }
 
+# creating IGW
+
+resource "aws_internet_gateway" "igw" {
+  vpc_id = local.vpc_id
+
+  tags = {
+    Name = "kojitechs"
+  }
+}
+
  # aws_vpc.kojitechs_vpc.id
 
  # creating public subnet
@@ -99,4 +109,68 @@ resource "aws_subnet" "database_subnet_2" {
   tags = {
     Name = "database_subnet_${data.aws_availability_zones.azs.names[1]}"
   }
+}
+
+# Creating public route table
+
+resource "aws_route_table" "route_table" {
+  vpc_id = local.vpc_id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id # destination
+  }
+
+  tags = {
+    Name = "kojitechs_route_table"
+  }
+}
+
+# creating route table association
+
+resource "aws_route_table_association" "pub_subnet_1" {
+  subnet_id      = aws_subnet.pub_subnet_1.id
+  route_table_id = aws_route_table.route_table.id
+}
+resource "aws_route_table_association" "pub_subnet_2" {
+  subnet_id     = aws_subnet.pub_subnet_2.id
+  route_table_id = aws_route_table.route_table.id
+}
+
+
+# working with default route table
+
+resource "aws_default_route_table" "default_routetable" {
+  default_route_table_id = aws_vpc.kojitechs_vpc.default_route_table_id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+
+  tags = {
+    Name = "default_routetable"
+  }
+}
+
+# creating NAT Gateway
+
+resource "aws_nat_gateway" "ngw" {
+  allocation_id = aws_eip.eip.id
+  subnet_id     = aws_subnet.priv_subnet_1.id
+
+  tags = {
+    Name = "gw NAT"
+  }
+
+  # To ensure proper ordering, it is recommended to add an explicit dependency
+  # on the Internet Gateway for the VPC.
+  depends_on = [aws_internet_gateway.igw]
+}
+
+#creating EIP since NAT Gateway can be reusable
+
+resource "aws_eip" "eip" {
+  vpc      = true
+  depends_on = [aws_internet_gateway.igw]
 }
